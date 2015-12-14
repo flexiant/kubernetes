@@ -14,15 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cloudprovider
+package concerto_cloud
 
 import (
-	// Cloud providers
-	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/aws"
-	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/concerto"
-	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/gce"
-	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/mesos"
-	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/openstack"
-	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/ovirt"
-	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/rackspace"
+	"github.com/golang/glog"
+	"k8s.io/kubernetes/pkg/cloudprovider"
 )
+
+// GetZone returns the Zone containing the current failure zone and locality
+// region that the program is running in
+func (concerto *ConcertoCloud) GetZone() (cloudprovider.Zone, error) {
+	glog.Infoln("Concerto GetZone")
+
+	return cloudprovider.Zone{"concerto", "concerto"}, nil
+}

@@ -72,6 +72,33 @@ func (c *ConcertoCloud) EnsureTCPLoadBalancer(name, region string, loadBalancerI
 		return nil, LoadBalancerUnsupportedNumberOfPortsError
 	}
 
+	// Check previous existence
+	lb, err := c.service.GetLoadBalancerByName(name)
+	if err != nil {
+		glog.Error("Error in EnsureTCPLoadBalancer: ", err)
+		return nil, err
+	}
+
+	if lb == nil {
+		// It does not exist: create it
+		lb, err = c.createTCPLoadBalancer(name, ports, hosts)
+		if err != nil {
+			glog.Error("Error in EnsureTCPLoadBalancer: ", err)
+			return nil, err
+		}
+	} else {
+		// It already exists: update it
+		err = c.UpdateTCPLoadBalancer(name, region, hosts)
+		if err != nil {
+			glog.Error("Error in EnsureTCPLoadBalancer: ", err)
+			return nil, err
+		}
+	}
+
+	return toStatus(lb), nil
+}
+
+func (c *ConcertoCloud) createTCPLoadBalancer(name string, ports []*api.ServicePort, hosts []string) (*ConcertoLoadBalancer, error) {
 	// Create the LB
 	port := ports[0].Port // The port that will be exposed on the service.
 	// targetPort := ports[0].TargetPort // Optional: The target port on pods selected by this service
@@ -87,14 +114,16 @@ func (c *ConcertoCloud) EnsureTCPLoadBalancer(name, region string, loadBalancerI
 		ipAddresses, err := c.hostsNamesToIPs(hosts)
 		if err != nil {
 			glog.Error("Error in EnsureTCPLoadBalancer: ", err)
+			return nil, err
 		}
 		err = c.service.RegisterInstancesWithLoadBalancer(lb.Id, ipAddresses)
 		if err != nil {
 			glog.Error("Error in EnsureTCPLoadBalancer: ", err)
+			return nil, err
 		}
 	}
 
-	return toStatus(lb), err
+	return lb, nil
 }
 
 // UpdateTCPLoadBalancer implementation for Flexiant Concerto.

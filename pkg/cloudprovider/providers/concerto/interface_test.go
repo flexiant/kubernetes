@@ -60,3 +60,38 @@ func TestZones(t *testing.T) {
 		t.Errorf("Unexpected error fetching Concerto 'Zones' component")
 	}
 }
+
+func TestClusters(t *testing.T) {
+	concerto := &ConcertoCloud{}
+	clusters, supported := concerto.Clusters()
+	if supported {
+		t.Errorf("'Clusters' interface is suppossed to be unsupported")
+	}
+	if clusters != nil {
+		t.Errorf("'Clusters' interface is suppossed to be unsupported")
+	}
+}
+
+func TestRoutes(t *testing.T) {
+	concerto := &ConcertoCloud{}
+	routes, supported := concerto.Routes()
+	if supported {
+		t.Errorf("'Routes' interface is suppossed to be unsupported")
+	}
+	if routes != nil {
+		t.Errorf("'Routes' interface is suppossed to be unsupported")
+	}
+}
+
+func TestScrubDNS(t *testing.T) {
+	concerto := &ConcertoCloud{}
+	nsIn := []string{"ns1"}
+	srchIn := []string{"*"}
+	nsOut, srchOut := concerto.ScrubDNS(nsIn, srchIn)
+	if len(nsOut) != len(nsIn) || nsOut[0] != nsIn[0] {
+		t.Errorf("'ScrubDNS' : returned 'nameservers' should equal received 'nameservers'")
+	}
+	if len(srchOut) != len(srchIn) || srchOut[0] != srchIn[0] {
+		t.Errorf("'ScrubDNS' : returned 'searches' should equal received 'searches'")
+	}
+}

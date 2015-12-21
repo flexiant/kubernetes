@@ -106,7 +106,7 @@ func TestEnsureTCPLoadBalancerWithUnsupportedAffinity(t *testing.T) {
 		ports, // ports
 		[]string{"host1", "host2"},
 		api.ServiceAffinityClientIP)
-	if err != LoadBalancerUnsupportedAffinityError {
+	if err == nil {
 		t.Errorf("EnsureTCPLoadBalancer: should not support ServiceAffinity")
 	}
 }
@@ -120,7 +120,7 @@ func TestEnsureTCPLoadBalancerWithNoPort(t *testing.T) {
 		ports, // ports
 		[]string{"host1", "host2"},
 		api.ServiceAffinityNone)
-	if err != LoadBalancerUnsupportedNumberOfPortsError {
+	if err == nil {
 		t.Errorf("EnsureTCPLoadBalancer: should return error if no port specified")
 	}
 }
@@ -137,7 +137,7 @@ func TestEnsureTCPLoadBalancerWithMultiplePorts(t *testing.T) {
 		ports, // ports
 		[]string{"host1", "host2"},
 		api.ServiceAffinityNone)
-	if err != LoadBalancerUnsupportedNumberOfPortsError {
+	if err == nil {
 		t.Errorf("EnsureTCPLoadBalancer: should return error if no port specified")
 	}
 }
@@ -153,7 +153,7 @@ func TestEnsureTCPLoadBalancerWithExternalIP(t *testing.T) {
 		ports,    // ports
 		[]string{"host1", "host2"},
 		api.ServiceAffinityNone)
-	if err != LoadBalancerUnsupportedExternalIPError {
+	if err == nil {
 		t.Errorf("EnsureTCPLoadBalancer: should not support ExternalIP specification")
 	}
 }

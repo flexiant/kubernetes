@@ -19,7 +19,6 @@ package concerto_cloud
 import (
 	"io"
 
-	"github.com/golang/glog"
 	"github.com/scalingdata/gcfg"
 
 	"k8s.io/kubernetes/pkg/cloudprovider"
@@ -56,14 +55,7 @@ func init() {
 	cloudprovider.RegisterCloudProvider(
 		ProviderName,
 		func(config io.Reader) (cloudprovider.Interface, error) {
-			glog.Info("Initialization of Concerto Cloud")
 			cc, err := newConcertoCloud(config)
-			if err != nil {
-				glog.Info("Concerto Cloud initialized (error): ", err)
-			} else {
-				glog.Info("Concerto Cloud initialized: ", cc)
-				glog.Info("Concerto Cloud initialized (service): ", cc.service)
-			}
 			return cc, err
 		})
 }
@@ -72,7 +64,8 @@ func init() {
 func newConcertoCloud(config io.Reader) (*ConcertoCloud, error) {
 	concertoConfig := ConcertoConfig{}
 
-	if err := gcfg.ReadInto(&concertoConfig, config); err != nil {
+	err := gcfg.ReadInto(&concertoConfig, config)
+	if err != nil {
 		return nil, err
 	}
 

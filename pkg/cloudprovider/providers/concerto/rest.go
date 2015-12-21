@@ -18,11 +18,10 @@ package concerto_cloud
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
-
-	"github.com/golang/glog"
 )
 
 type restService struct {
@@ -31,23 +30,18 @@ type restService struct {
 }
 
 func newRestService(config ConcertoConfig) (*restService, error) {
-	glog.Infoln("newRestService")
-
 	client, err := httpClient(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating HTTP client: %v", err)
 	}
-
 	return &restService{config, client}, nil
 }
 
 func httpClient(config ConcertoConfig) (*http.Client, error) {
-	glog.Infoln("httpClient")
-
 	// Loads Clients Certificates and creates and 509KeyPair
 	cert, err := tls.LoadX509KeyPair(config.Connection.Cert, config.Connection.Key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error loading X509 key pair: %v", err)
 	}
 
 	// Creates a client with specific transport configurations
@@ -63,52 +57,51 @@ func httpClient(config ConcertoConfig) (*http.Client, error) {
 }
 
 func (r *restService) Post(path string, json []byte) ([]byte, int, error) {
-	glog.Infof("Posting %s with %s", path, string(json))
 	output := strings.NewReader(string(json))
 	response, err := r.client.Post(r.config.Connection.APIEndpoint+path, "application/json", output)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, fmt.Errorf("error on http request (POST %v): %v", r.config.Connection.APIEndpoint+path, err)
 	}
 	defer response.Body.Close()
 
 	body, _ := ioutil.ReadAll(response.Body)
-	glog.Infof("Post response: [%v] '%s'", response.StatusCode, body)
+	if err != nil {
+		return nil, -1, fmt.Errorf("error reading http request body: %v", err)
+	}
 
 	return body, response.StatusCode, err
 }
 
 func (r *restService) Delete(path string) ([]byte, int, error) {
-	glog.Infof("Deleting %s", path)
-
 	request, err := http.NewRequest("DELETE", r.config.Connection.APIEndpoint+path, nil)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, fmt.Errorf("error creating http request (DELETE %v): %v", r.config.Connection.APIEndpoint+path, err)
 	}
 	response, err := r.client.Do(request)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, fmt.Errorf("error executing http request (DELETE %v): %v", r.config.Connection.APIEndpoint+path, err)
 	}
 	defer response.Body.Close()
 
 	body, _ := ioutil.ReadAll(response.Body)
-	glog.Infof("Delete response: [%v] '%s'", response.StatusCode, body)
+	if err != nil {
+		return nil, -1, fmt.Errorf("error reading http request body: %v", err)
+	}
 
 	return body, response.StatusCode, nil
 }
 
 func (r *restService) Get(path string) ([]byte, int, error) {
-	glog.Infof("Getting '%s'", path)
 	response, err := r.client.Get(r.config.Connection.APIEndpoint + path)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, fmt.Errorf("error on http request (GET %v): %v", r.config.Connection.APIEndpoint+path, err)
 	}
 	defer response.Body.Close()
 
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, fmt.Errorf("error reading http request body: %v", err)
 	}
 
-	glog.Infof("Get response: [%v] '%s'", response.StatusCode, body)
 	return body, response.StatusCode, nil
 }

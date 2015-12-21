@@ -26,7 +26,7 @@ import (
 func TestAddSSHKeyToAllInstancesNotSupported(t *testing.T) {
 	concerto := &ConcertoCloud{}
 	err := concerto.AddSSHKeyToAllInstances("user", nil)
-	if err != UnsupportedOperation {
+	if err == nil {
 		t.Errorf("Expected 'AddSSHKeyToAllInstances' to not be supported")
 	}
 }
@@ -66,7 +66,7 @@ func TestNodeAddresses_InstanceNotFound(t *testing.T) {
 					Id:       "11235813",
 					PublicIP: "123.123.123.123"}}}}
 	na, err := concerto.NodeAddresses("myinstance") // ([]api.NodeAddress, error)
-	if err != cloudprovider.InstanceNotFound {
+	if err == nil {
 		t.Errorf("NodeAddresses: Should have returned error")
 	}
 	if len(na) != 0 {
@@ -216,7 +216,7 @@ func TestGetNodeResources_InstanceNotFound(t *testing.T) {
 					Memory:   4,
 				}}}}
 	nr, err := concerto.GetNodeResources("myinstance")
-	if err != cloudprovider.InstanceNotFound {
+	if err == nil {
 		t.Errorf("GetNodeResources: Should have returned error")
 	}
 	if nr != nil {

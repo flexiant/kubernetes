@@ -17,14 +17,11 @@ limitations under the License.
 package concerto_cloud
 
 import (
-	"github.com/golang/glog"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 )
 
 // GetZone returns the Zone containing the current failure zone and locality
 // region that the program is running in
 func (concerto *ConcertoCloud) GetZone() (cloudprovider.Zone, error) {
-	glog.Infoln("Concerto GetZone")
-
 	return cloudprovider.Zone{"concerto", "concerto"}, nil
 }

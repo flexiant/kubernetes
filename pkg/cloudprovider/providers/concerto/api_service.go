@@ -18,7 +18,6 @@ package concerto_cloud
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/golang/glog"
@@ -94,26 +93,21 @@ type concertoAPIServiceREST struct {
 
 // BuildConcertoRESTClient Factory for 'concertoAPIServiceREST' objects
 func buildConcertoRESTClient(config ConcertoConfig) (ConcertoAPIService, error) {
-	glog.Infoln("buildConcertoRESTClient")
 	rs, err := newRestService(config)
 	if err != nil {
-		glog.Error("Error in buildConcertoRESTClient: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error building Concerto REST client: %v", err)
 	}
-	glog.Infoln("buildConcertoRESTClient succeeded")
+
 	return &concertoAPIServiceREST{client: rs}, nil
 }
 
 func (c *concertoAPIServiceREST) GetInstanceList() ([]ConcertoInstance, error) {
-	glog.Infoln("GetInstanceList")
-
 	var ships []Ship
 	var instances []ConcertoInstance
 
 	data, status, err := c.client.Get("/kaas/ships")
 	if err != nil {
-		glog.Error("Error in GetInstanceList: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error on 'GET /kaas/ships' http request: %v", err)
 	}
 
 	if status == 404 {
@@ -122,8 +116,7 @@ func (c *concertoAPIServiceREST) GetInstanceList() ([]ConcertoInstance, error) {
 
 	err = json.Unmarshal(data, &ships)
 	if err != nil {
-		glog.Error("Error in GetInstanceList: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling http response: %v (received data was: %s)", err, string(data))
 	}
 
 	for _, s := range ships {
@@ -138,203 +131,159 @@ func (c *concertoAPIServiceREST) GetInstanceList() ([]ConcertoInstance, error) {
 		instances = append(instances, concertoInstance)
 	}
 
-	glog.Infof("GetInstanceList got %#v", instances)
-
 	return instances, nil
 }
 
 func (c *concertoAPIServiceREST) GetInstanceByName(name string) (ConcertoInstance, error) {
-	glog.Infoln("GetInstanceByName", name)
-
 	concertoInstances, err := c.GetInstanceList()
 	if err != nil {
-		glog.Error("Error in GetInstanceByName: ", err)
-		return ConcertoInstance{}, err
+		return ConcertoInstance{}, fmt.Errorf("error getting list of instances from Concerto: %v", err)
 	}
 
 	for _, instance := range concertoInstances {
 		if instance.Name == name {
-			glog.Infof("GetInstanceByName got %#v", instance)
 			return instance, nil
 		}
 	}
 
-	glog.Infof("GetInstanceByName did not find %#v", name)
 	return ConcertoInstance{}, cloudprovider.InstanceNotFound
 }
 
 func (c *concertoAPIServiceREST) GetLoadBalancerList() ([]ConcertoLoadBalancer, error) {
-	glog.Infoln("GetLoadBalancerList")
-
 	var lbs []ConcertoLoadBalancer
 
 	data, status, err := c.client.Get("/kaas/load_balancers")
 	if err != nil {
-		glog.Error("Error in GetLoadBalancerList: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error on 'GET /kaas/load_balancers' http request: %v", err)
 	}
 
 	if status >= 400 {
-		return nil, fmt.Errorf("HTTP %v when getting '/kaas/load_balancers'", status)
+		return nil, fmt.Errorf("HTTP status %v when getting '/kaas/load_balancers'", status)
 	}
 
 	err = json.Unmarshal(data, &lbs)
 	if err != nil {
-		glog.Error("Error in GetLoadBalancerList: ", err)
-		glog.Error("Received data: ", string(data))
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling http response: %v (received data was: %s)", err, string(data))
 	}
-
-	glog.Infof("GetLoadBalancerList got %#v", lbs)
 
 	return lbs, nil
 }
 
 func (c *concertoAPIServiceREST) GetLoadBalancerByName(name string) (*ConcertoLoadBalancer, error) {
-	glog.Infoln("GetLoadBalancerByName", name)
-
 	concertoLBs, err := c.GetLoadBalancerList()
 	if err != nil {
-		glog.Error("Error in GetLoadBalancerByName: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error getting load balancer list from Concerto: %v", err)
 	}
 
 	for _, lb := range concertoLBs {
 		if lb.Name == name {
-			glog.Infof("GetLoadBalancerByName got %#v", lb)
 			return &lb, nil
 		}
 	}
 
-	glog.Infof("GetLoadBalancerByName did not find %s", name)
+	glog.Warningf("Could not find load balancer '%s' on Concerto", name)
 	return nil, nil
 }
 
 func (c *concertoAPIServiceREST) DeleteLoadBalancerById(id string) error {
-	glog.Infoln("DeleteLoadBalancerById", id)
-
 	_, status, err := c.client.Delete("/kaas/load_balancers/" + id)
 	if err != nil {
-		glog.Error("Error in GetLoadBalancerByName: ", err)
-		return err
+		return fmt.Errorf("error on http request 'DELETE /kaas/load_balancers/%s': %v", id, err)
 	}
-	if status == 200 || status == 204 {
-		glog.Infof("DeleteLoadBalancerById successful: %s", id)
-		return nil
+	if status != 200 && status != 204 {
+		return fmt.Errorf("http status %v on request 'DELETE /kaas/load_balancers/%s' (expected 204 or 200)", status, id)
 	}
-	return LoadBalancerDeleteError
+	return nil
 }
 
 func (c *concertoAPIServiceREST) RegisterInstancesWithLoadBalancer(loadBalancerId string, ips []string) error {
-	glog.Infoln("RegisterInstancesWithLoadBalancer", loadBalancerId, ips)
 	for _, ip := range ips {
 		err := c.registerInstanceWithLoadBalancer(loadBalancerId, ip)
 		if err != nil {
-			glog.Error("Error in RegisterInstancesWithLoadBalancer: ", err)
-			return err
+			return fmt.Errorf("error registering instance '%s' with load balancer '%s': %v", ip, loadBalancerId, err)
 		}
 	}
-	glog.Infoln("RegisterInstancesWithLoadBalancer successful")
 	return nil
 }
 
 func (c *concertoAPIServiceREST) registerInstanceWithLoadBalancer(loadBalancerId string, ip string) error {
 	instance, err := c.GetInstanceByIP(ip)
 	if err != nil {
-		glog.Error("Error in registerInstanceWithLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error getting Concerto instance by IP '%s': %v", ip, err)
 	}
 	jsonNode := instance.toNode().toJson()
-	body, status, err := c.client.Post(fmt.Sprintf("/kaas/load_balancers/%s/nodes", loadBalancerId), jsonNode)
+	url := fmt.Sprintf("/kaas/load_balancers/%s/nodes", loadBalancerId)
+	_, status, err := c.client.Post(url, jsonNode)
 	if err != nil {
-		glog.Error("Error in registerInstanceWithLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error on http request 'POST %s': %v", url, err)
 	}
 	if status != 201 {
-		glog.Errorf("HTTP %s in registerInstanceWithLoadBalancer: %s", status, string(body))
-		return LoadBalancerRegisterInstanceError
+		return fmt.Errorf("http status %v on request 'POST %s' (expected 201)", status, url)
 	}
-	glog.Infof("registerInstanceWithLoadBalancer successful: added %s to %s", ip, loadBalancerId)
 	return nil
 }
 
 func (c *concertoAPIServiceREST) DeregisterInstancesFromLoadBalancer(loadBalancerId string, ips []string) error {
-	glog.Infoln("DeregisterInstancesFromLoadBalancer", loadBalancerId, ips)
 	for _, ip := range ips {
 		err := c.deregisterInstanceFromLoadBalancer(loadBalancerId, ip)
 		if err != nil {
-			glog.Error("Error in DeregisterInstancesFromLoadBalancer: ", err)
-			return err
+			return fmt.Errorf("error deregistering instance '%s' from load balancer '%s': %v", ip, loadBalancerId, err)
 		}
 	}
-	glog.Infoln("DeregisterInstancesFromLoadBalancer successful")
 	return nil
 }
 
 func (c *concertoAPIServiceREST) deregisterInstanceFromLoadBalancer(loadBalancerId string, ip string) error {
 	node, err := c.GetNodeByIP(loadBalancerId, ip)
 	if err != nil {
-		glog.Error("Error in deregisterInstanceFromLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error getting node by ip '%s' from load balancer '%s': %v", ip, loadBalancerId, err)
 	}
-	_, status, err := c.client.Delete(fmt.Sprintf("/kaas/load_balancers/%s/nodes/%s", loadBalancerId, node.ID))
+	path := fmt.Sprintf("/kaas/load_balancers/%s/nodes/%s", loadBalancerId, node.ID)
+	_, status, err := c.client.Delete(path)
 	if err != nil {
-		glog.Error("Error in deregisterInstanceFromLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error on http request 'DELETE %s': %v", path, err)
 	}
-	if status == 200 || status == 204 {
-		glog.Infof("deregisterInstanceFromLoadBalancer successful: removed %s from %s", ip, loadBalancerId)
-		return nil
+	if status != 200 && status != 204 {
+		return fmt.Errorf("http status %v on request 'DELETE %s' (expected 204 or 200)", status, path)
 	}
-	return LoadBalancerDeregisterInstanceError
+	return nil
 }
 
 func (c *concertoAPIServiceREST) GetLoadBalancerNodes(loadBalancerId string) ([]ConcertoLoadBalancerNode, error) {
-	glog.Infoln("GetLoadBalancerNodes", loadBalancerId)
-
 	var nodes []ConcertoLoadBalancerNode
 
-	data, status, err := c.client.Get(fmt.Sprintf("/kaas/load_balancers/%s/nodes", loadBalancerId))
+	path := fmt.Sprintf("/kaas/load_balancers/%s/nodes", loadBalancerId)
+	data, status, err := c.client.Get(path)
 	if err != nil {
-		glog.Error("Error in GetLoadBalancerNodes: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error on http request 'GET %s': %v", path, err)
 	}
 
 	if status == 404 {
-		return nil, errors.New("Load balancer not found " + loadBalancerId)
+		return nil, fmt.Errorf("load balancer not found: %v", loadBalancerId)
 	}
 
 	err = json.Unmarshal(data, &nodes)
 	if err != nil {
-		glog.Error("Error in GetLoadBalancerNodes: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling http response: %v (received data was: %s)", err, string(data))
 	}
-
-	glog.Infof("GetLoadBalancerNodes received json : %s", string(data))
 
 	return nodes, nil
 }
 
 func (c *concertoAPIServiceREST) GetLoadBalancerNodesAsIPs(loadBalancerId string) (nodeips []string, e error) {
-	glog.Infoln("GetLoadBalancerNodes", loadBalancerId)
-
 	nodes, err := c.GetLoadBalancerNodes(loadBalancerId)
 	if err != nil {
-		glog.Error("Error in GetLoadBalancerNodesAsIPs: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error getting nodes from load balancer '%s' : %v", loadBalancerId, err)
 	}
 
 	for _, node := range nodes {
 		nodeips = append(nodeips, node.IP)
 	}
 
-	glog.Infof("GetLoadBalancerNodesAsIPs got %v nodes : %#v", len(nodeips), nodeips)
-	return
+	return nodeips, nil
 }
 
 func (c *concertoAPIServiceREST) CreateLoadBalancer(name string, port int, nodePort int) (*ConcertoLoadBalancer, error) {
-	glog.Infoln("CreateLoadBalancer", name, port)
-
 	lb := ConcertoLoadBalancer{
 		Name:     name,
 		FQDN:     name,
@@ -344,8 +293,7 @@ func (c *concertoAPIServiceREST) CreateLoadBalancer(name string, port int, nodeP
 	}
 	data, status, err := c.client.Post("/kaas/load_balancers", lb.toJson())
 	if err != nil {
-		glog.Error("Error in CreateLoadBalancer: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error on http request 'POST /kaas/load_balancers': %v", err)
 	}
 	if status != 201 {
 		return nil, fmt.Errorf("HTTP %v when creating load balancer %s", status, name)
@@ -353,52 +301,40 @@ func (c *concertoAPIServiceREST) CreateLoadBalancer(name string, port int, nodeP
 
 	err = json.Unmarshal(data, &lb) // So that we get the Id
 	if err != nil {
-		glog.Error("Error in CreateLoadBalancer: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling http response: %v (received data was: %s)", err, string(data))
 	}
 
-	glog.Infof("CreateLoadBalancer successful: %v", lb)
 	return &lb, nil
 }
 
 func (c *concertoAPIServiceREST) GetInstanceByIP(ip string) (ConcertoInstance, error) {
-	glog.Infoln("GetInstanceByIP", ip)
-
 	concertoInstances, err := c.GetInstanceList()
 	if err != nil {
-		glog.Error("Error in GetInstanceByIP: ", err)
-		return ConcertoInstance{}, err
+		return ConcertoInstance{}, fmt.Errorf("error getting instance list from Concerto: %v", err)
 	}
 
 	for _, instance := range concertoInstances {
 		if instance.PublicIP == ip {
-			glog.Infof("GetInstanceByIP got %#v", instance)
-			return instance, err
+			return instance, nil
 		}
 	}
 
-	glog.Infof("GetInstanceByIP did not find %#v", ip)
 	return ConcertoInstance{}, cloudprovider.InstanceNotFound
 }
 
 func (c *concertoAPIServiceREST) GetNodeByIP(loadBalancerId, ip string) (ConcertoLoadBalancerNode, error) {
-	glog.Infoln("GetNodeByIP", ip)
-
 	lbNodes, err := c.GetLoadBalancerNodes(loadBalancerId)
 	if err != nil {
-		glog.Error("Error in GetNodeByIP: ", err)
-		return ConcertoLoadBalancerNode{}, err
+		return ConcertoLoadBalancerNode{}, fmt.Errorf("error getting nodes from load balancer '%s' : %v", loadBalancerId, err)
 	}
 
 	for _, node := range lbNodes {
 		if node.IP == ip {
-			glog.Infof("GetNodeByIP got %#v", node)
-			return node, err
+			return node, nil
 		}
 	}
 
-	glog.Infof("GetNodeByIP did not find %#v", ip)
-	return ConcertoLoadBalancerNode{}, fmt.Errorf("Node %s not found in load balancer %s", ip, loadBalancerId)
+	return ConcertoLoadBalancerNode{}, fmt.Errorf("Node '%s' not found in load balancer '%s'", ip, loadBalancerId)
 }
 
 func (ci ConcertoInstance) toNode() ConcertoLoadBalancerNode {

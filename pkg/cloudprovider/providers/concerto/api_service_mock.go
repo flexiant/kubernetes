@@ -17,6 +17,7 @@ limitations under the License.
 package concerto_cloud
 
 import (
+	"errors"
 	"math/rand"
 
 	"k8s.io/kubernetes/pkg/cloudprovider"
@@ -62,7 +63,7 @@ func (mock *ConcertoAPIServiceMock) DeleteLoadBalancerById(id string) error {
 			return nil
 		}
 	}
-	return LoadBalancerDeleteError
+	return errors.New("load balancer delete error")
 }
 
 func (mock *ConcertoAPIServiceMock) GetLoadBalancerNodes(loadBalancerId string) ([]ConcertoLoadBalancerNode, error) {

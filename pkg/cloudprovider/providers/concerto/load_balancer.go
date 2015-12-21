@@ -20,18 +20,14 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/golang/glog"
 	"k8s.io/kubernetes/pkg/api"
 )
 
 // GetTCPLoadBalancer implementation for Flexiant Concerto.
 func (c *ConcertoCloud) GetTCPLoadBalancer(name, _region string) (status *api.LoadBalancerStatus, exists bool, err error) {
-	glog.Infoln("Concerto GetTCPLoadBalancer", name)
-
 	lb, err := c.service.GetLoadBalancerByName(name)
 	if err != nil {
-		glog.Error("Error in GetTCPLoadBalancer: ", err)
-		return nil, false, err
+		return nil, false, fmt.Errorf("error getting Concerto load balancer by name '%s' : %v", name, err)
 	}
 
 	if lb == nil {
@@ -54,44 +50,36 @@ func toStatus(lb *ConcertoLoadBalancer) *api.LoadBalancerStatus {
 
 // EnsureTCPLoadBalancer implementation for Flexiant Concerto.
 func (c *ConcertoCloud) EnsureTCPLoadBalancer(name, region string, loadBalancerIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
-	glog.Infof("Concerto EnsureTCPLoadBalancer %s %v", name, hosts)
-	for i, p := range ports {
-		glog.Infof("Concerto EnsureTCPLoadBalancer port: %v %#v", i, p)
-	}
-
 	// Concerto LB does not support session affinity
 	if affinityType != api.ServiceAffinityNone {
-		return nil, LoadBalancerUnsupportedAffinityError
+		return nil, fmt.Errorf("Unsupported load balancer affinity: %v", affinityType)
 	}
 	// Can not specify a public IP for the LB
 	if loadBalancerIP != nil {
-		return nil, LoadBalancerUnsupportedExternalIPError
+		return nil, fmt.Errorf("can not specify an IP address for a Concerto load balancer")
 	}
 	// Dont support multi-port
 	if len(ports) != 1 {
-		return nil, LoadBalancerUnsupportedNumberOfPortsError
+		return nil, fmt.Errorf("Concerto load balancer only supports one single port")
 	}
 
 	// Check previous existence
 	lb, err := c.service.GetLoadBalancerByName(name)
 	if err != nil {
-		glog.Error("Error in EnsureTCPLoadBalancer: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error checking existence of load balancer '%s' in Concerto: %v", name, err)
 	}
 
 	if lb == nil {
 		// It does not exist: create it
 		lb, err = c.createTCPLoadBalancer(name, ports, hosts)
 		if err != nil {
-			glog.Error("Error in EnsureTCPLoadBalancer: ", err)
-			return nil, err
+			return nil, fmt.Errorf("error creating load balancer '%s' in Concerto: %v", name, err)
 		}
 	} else {
 		// It already exists: update it
 		err = c.UpdateTCPLoadBalancer(name, region, hosts)
 		if err != nil {
-			glog.Error("Error in EnsureTCPLoadBalancer: ", err)
-			return nil, err
+			return nil, fmt.Errorf("error updating load balancer '%s' in Concerto: %v", name, err)
 		}
 	}
 
@@ -105,21 +93,18 @@ func (c *ConcertoCloud) createTCPLoadBalancer(name string, ports []*api.ServiceP
 	nodePort := ports[0].NodePort // The port on each node on which this service is exposed.
 	lb, err := c.service.CreateLoadBalancer(name, port, nodePort)
 	if err != nil {
-		glog.Error("Error in EnsureTCPLoadBalancer: ", err)
-		return nil, err
+		return nil, fmt.Errorf("error creating Concerto load balancer (%v/%v/%v): %v", name, port, nodePort, err)
 	}
 
 	// Add the corresponding nodes
 	if len(hosts) > 0 {
 		ipAddresses, err := c.hostsNamesToIPs(hosts)
 		if err != nil {
-			glog.Error("Error in EnsureTCPLoadBalancer: ", err)
-			return nil, err
+			return nil, fmt.Errorf("error converting hostnames to IP addresses: %v", err)
 		}
 		err = c.service.RegisterInstancesWithLoadBalancer(lb.Id, ipAddresses)
 		if err != nil {
-			glog.Error("Error in EnsureTCPLoadBalancer: ", err)
-			return nil, err
+			return nil, fmt.Errorf("error registering instances with load balancer: %v", err)
 		}
 	}
 
@@ -128,57 +113,44 @@ func (c *ConcertoCloud) createTCPLoadBalancer(name string, ports []*api.ServiceP
 
 // UpdateTCPLoadBalancer implementation for Flexiant Concerto.
 func (c *ConcertoCloud) UpdateTCPLoadBalancer(name, region string, hosts []string) error {
-	glog.Infoln("Concerto UpdateTCPLoadBalancer", name, hosts)
-
 	// Get the load balancer
 	lb, err := c.service.GetLoadBalancerByName(name)
 	if err != nil {
-		glog.Error("Error in UpdateTCPLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error getting Concerto load balancer by name '%s': %v", name, err)
 	}
 	// Get the LB nodes
 	currentNodes, err := c.service.GetLoadBalancerNodesAsIPs(lb.Id)
 	if err != nil {
-		glog.Error("Error in UpdateTCPLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error getting nodes (as IP addresses) of Concerto load balancer '%s': %v", lb.Id, err)
 	}
 
 	// Calculate nodes to deregister
 	wantedNodes, err := c.hostsNamesToIPs(hosts)
 	if err != nil {
-		glog.Error("Error in UpdateTCPLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error converting hostnames to IP addresses: %v", err)
 	}
 	nodesToRemove := subtractStringArrays(currentNodes, wantedNodes)
 	// Calculate nodes to be registered
 	nodesToAdd := subtractStringArrays(wantedNodes, currentNodes)
-	// Lets do it
-	glog.Infof("UpdateTCPLoadBalancer will remove %v for %s", nodesToRemove, name)
-	glog.Infof("UpdateTCPLoadBalancer will add %v for %s", nodesToAdd, name)
+	// Do the thing
 	err = c.service.DeregisterInstancesFromLoadBalancer(lb.Id, nodesToRemove)
 	if err != nil {
-		glog.Error("Error in UpdateTCPLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error deregistering instances (%v) from load balancer (%v) : %v", nodesToRemove, lb.Id, err)
 	}
 	err = c.service.RegisterInstancesWithLoadBalancer(lb.Id, nodesToAdd)
 	if err != nil {
-		glog.Error("Error in UpdateTCPLoadBalancer: ", err)
-		return err
+		return fmt.Errorf("error registering instances (%v) with load balancer (%v) : %v", nodesToAdd, lb.Id, err)
 	}
-	// Done!
-	glog.Infof("UpdateTCPLoadBalancer success: %s", name)
+
 	return nil
 }
 
 // EnsureTCPLoadBalancerDeleted implementation for Flexiant Concerto.
 func (c *ConcertoCloud) EnsureTCPLoadBalancerDeleted(name, region string) error {
-	glog.Infoln("Concerto EnsureTCPLoadBalancerDeleted", name)
-
 	// Get the LB
 	lb, err := c.service.GetLoadBalancerByName(name)
 	if err != nil {
-		glog.Error("Error in EnsureTCPLoadBalancerDeleted: ", err)
-		return err
+		return fmt.Errorf("error getting Concerto load balancer by name '%s': %v", name, err)
 	}
 	if lb == nil {
 		return nil
@@ -188,10 +160,9 @@ func (c *ConcertoCloud) EnsureTCPLoadBalancerDeleted(name, region string) error 
 
 func (c *ConcertoCloud) hostsNamesToIPs(hosts []string) ([]string, error) {
 	var ips []string
-	glog.Infoln("Looking up following hosts", hosts)
 	instances, err := c.service.GetInstanceList()
 	if err != nil {
-		return nil, fmt.Errorf("Error while converting names to IP addresses: %v", err)
+		return nil, fmt.Errorf("error getting Concerto instance list : %v", err)
 	}
 	for _, name := range hosts {
 		found := false
@@ -203,7 +174,7 @@ func (c *ConcertoCloud) hostsNamesToIPs(hosts []string) ([]string, error) {
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("Could not find instance: %s", name)
+			return nil, fmt.Errorf("could not find instance: %s", name)
 		}
 	}
 	return ips, nil

@@ -47,8 +47,8 @@ func httpClient(config ConcertoConfig) (*http.Client, error) {
 	// Creates a client with specific transport configurations
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			// InsecureSkipVerify: true,
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: true,
 		},
 	}
 	client := &http.Client{Transport: transport}

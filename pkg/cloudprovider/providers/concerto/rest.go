@@ -29,7 +29,7 @@ type restService struct {
 	client *http.Client
 }
 
-func newRestService(config ConcertoConfig) (*restService, error) {
+func newRestService(config ConcertoConfig) (concertoRESTService, error) {
 	client, err := httpClient(config)
 	if err != nil {
 		return nil, fmt.Errorf("error creating HTTP client: %v", err)

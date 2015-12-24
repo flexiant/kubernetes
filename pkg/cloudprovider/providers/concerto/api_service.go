@@ -60,7 +60,6 @@ type ConcertoInstance struct {
 type Ship struct {
 	Id             string
 	Fqdn           string
-	Name           string
 	Public_ip      string
 	Server_plan_id string
 	Cpus           float64 // Number of cores
@@ -88,7 +87,16 @@ type ConcertoLoadBalancerNode struct {
 // Concerto REST API client implementation
 type concertoAPIServiceREST struct {
 	// Pre-configured HTTP client
-	client *restService
+	client concertoRESTService
+}
+
+type concertoRESTService interface {
+	// Get resource at 'path', returning body, status code, and error if any
+	Get(path string) ([]byte, int, error)
+	// Post resource to 'path', returning body, status code, and error if any
+	Post(path string, json []byte) ([]byte, int, error)
+	// Delete resource at 'path', returning body, status code, and error if any
+	Delete(path string) ([]byte, int, error)
 }
 
 // BuildConcertoRESTClient Factory for 'concertoAPIServiceREST' objects
@@ -103,7 +111,7 @@ func buildConcertoRESTClient(config ConcertoConfig) (ConcertoAPIService, error) 
 
 func (c *concertoAPIServiceREST) GetInstanceList() ([]ConcertoInstance, error) {
 	var ships []Ship
-	var instances []ConcertoInstance
+	instances := []ConcertoInstance{}
 
 	data, status, err := c.client.Get("/kaas/ships")
 	if err != nil {

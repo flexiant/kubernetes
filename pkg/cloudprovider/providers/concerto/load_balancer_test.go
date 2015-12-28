@@ -42,6 +42,22 @@ func TestGetTCPLoadBalancer(t *testing.T) {
 	}
 }
 
+func TestGetTCPLoadBalancer_NonExisting(t *testing.T) {
+	apiMock := &ConcertoAPIServiceMock{
+		balancers: []ConcertoLoadBalancer{
+			{Id: "123456", Name: "mybalancer", FQDN: "mybalancer.concerto.mock"},
+		},
+	}
+	concerto := ConcertoCloud{service: apiMock}
+	_, exists, err := concerto.GetTCPLoadBalancer("otherbalancer", "whatever region")
+	if err != nil {
+		t.Errorf("GetTCPLoadBalancer: should not have returned error")
+	}
+	if exists {
+		t.Errorf("GetTCPLoadBalancer: should not have found the LB")
+	}
+}
+
 func TestEnsureTCPLoadBalancer_CreatesTheLBInConcerto(t *testing.T) {
 	apiMock := &ConcertoAPIServiceMock{
 		balancers:         []ConcertoLoadBalancer{},
@@ -158,6 +174,44 @@ func TestEnsureTCPLoadBalancerWithExternalIP(t *testing.T) {
 	}
 }
 
+func TestEnsureTCPLoadBalancer_UpdatesTheLBInConcerto(t *testing.T) {
+	apiMock := &ConcertoAPIServiceMock{
+		balancers: []ConcertoLoadBalancer{
+			{Id: "LB1", Name: "mybalancer"},
+		},
+		balancedInstances: map[string][]string{
+			"LB1": {"123.123.123.123", "123.123.123.124"},
+		},
+		instances: []ConcertoInstance{
+			{Name: "host1", Id: "11235813", PublicIP: "123.123.123.123"},
+			{Name: "host2", Id: "11235815", PublicIP: "123.123.123.124"},
+			{Name: "host3", Id: "11235817", PublicIP: "123.123.123.125"},
+		},
+	}
+	ports := []*api.ServicePort{
+		{Port: 1234},
+	}
+	concerto := ConcertoCloud{service: apiMock}
+	_, err := concerto.EnsureTCPLoadBalancer("mybalancer",
+		"region",
+		nil,   // external ip
+		ports, // ports
+		[]string{"host1", "host3"},
+		api.ServiceAffinityNone)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if len(apiMock.balancers) > 1 {
+		t.Errorf("EnsureTCPLoadBalancer: should not have created the LB")
+	} else if len(apiMock.balancers) < 1 {
+		t.Errorf("EnsureTCPLoadBalancer: should not have deleted the LB")
+	} else {
+		if apiMock.balancedInstances["LB1"][0] != "123.123.123.123" || apiMock.balancedInstances["LB1"][1] != "123.123.123.125" {
+			t.Errorf("EnsureTCPLoadBalancer: should have updated the load balancer: %v", apiMock.balancedInstances["LB1"])
+		}
+	}
+}
+
 func TestUpdateTCPLoadBalancer(t *testing.T) {
 	apiMock := &ConcertoAPIServiceMock{
 		balancers: []ConcertoLoadBalancer{
@@ -195,5 +249,34 @@ func TestEnsureTCPLoadBalancerDeleted(t *testing.T) {
 	}
 	if len(apiMock.balancers) > 0 {
 		t.Errorf("EnsureTCPLoadBalancerDeleted: should have deleted the load balancer")
+	}
+}
+
+func Test_EnsureTCPLoadBalancerDeleted_NonExisting(t *testing.T) {
+	apiMock := &ConcertoAPIServiceMock{
+		balancers: []ConcertoLoadBalancer{
+			{Id: "123456", Name: "mybalancer"},
+		},
+	}
+	concerto := ConcertoCloud{service: apiMock}
+	err := concerto.EnsureTCPLoadBalancerDeleted("anotherbalancer", "whatever region")
+	if err != nil {
+		t.Errorf("EnsureTCPLoadBalancerDeleted: should not have returned error")
+	}
+	if len(apiMock.balancers) == 0 {
+		t.Errorf("EnsureTCPLoadBalancerDeleted: should not have deleted any load balancer")
+	}
+}
+
+func Test_EnsureTCPLoadBalancerDeleted_Error(t *testing.T) {
+	apiMock := &ConcertoAPIServiceMock{
+		balancers: []ConcertoLoadBalancer{
+			{Id: "123456", Name: "mybalancer"},
+		},
+	}
+	concerto := ConcertoCloud{service: apiMock}
+	err := concerto.EnsureTCPLoadBalancerDeleted("GiveMeAnError", "whatever region")
+	if err == nil {
+		t.Errorf("Error was expected but got none")
 	}
 }

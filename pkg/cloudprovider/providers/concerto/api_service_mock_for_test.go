@@ -18,6 +18,7 @@ package concerto_cloud
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 
 	"k8s.io/kubernetes/pkg/cloudprovider"
@@ -44,6 +45,9 @@ func (mock *ConcertoAPIServiceMock) GetInstanceList() ([]ConcertoInstance, error
 }
 
 func (mock *ConcertoAPIServiceMock) GetLoadBalancerByName(name string) (*ConcertoLoadBalancer, error) {
+	if name == "GiveMeAnError" {
+		return nil, fmt.Errorf("Take this!")
+	}
 	for _, lb := range mock.balancers {
 		if lb.Name == name {
 			return &lb, nil

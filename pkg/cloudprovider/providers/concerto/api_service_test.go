@@ -17,6 +17,7 @@ limitations under the License.
 package concerto_cloud
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -203,21 +204,149 @@ func Test_RegisterInstancesWithLoadBalancer(t *testing.T) {
 	}
 }
 
-func TestGetLoadBalancerNodes(t *testing.T) {
-	t.Skipf("Pending test implementation: GetLoadBalancerNodes")
-}
-
 func TestDeregisterInstancesFromLoadBalancer(t *testing.T) {
-	t.Skipf("Pending test implementation: DeregisterInstancesFromLoadBalancer")
+	jsonList := "[{\"id\":\"1234\",\"public_ip\":\"1.2.3.4\"},{\"id\":\"5678\",\"public_ip\":\"5.6.7.8\"},{\"id\":\"0000\",\"public_ip\":\"0.0.0.0\"}]"
+	restMock := buildConcertoRESTMockClient(jsonList, 204, nil)
+	apiService := concertoAPIServiceREST{client: restMock}
+	err := apiService.DeregisterInstancesFromLoadBalancer("someLB", []string{"1.2.3.4", "5.6.7.8"})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	expectedCalls := []string{
+		"GET /kaas/load_balancers/someLB/nodes",
+		"DELETE /kaas/load_balancers/someLB/nodes/1234",
+		"GET /kaas/load_balancers/someLB/nodes",
+		"DELETE /kaas/load_balancers/someLB/nodes/5678",
+	}
+	if len(restMock.receivedCalls) != 4 ||
+		restMock.receivedCalls[0] != expectedCalls[0] ||
+		restMock.receivedCalls[1] != expectedCalls[1] ||
+		restMock.receivedCalls[2] != expectedCalls[2] ||
+		restMock.receivedCalls[3] != expectedCalls[3] {
+		t.Errorf("Received this sequence of calls: '%v' but expected: '%v'", restMock.receivedCalls, expectedCalls)
+	}
 }
 
-func TestCreateLoadBalancer(t *testing.T) {
-	t.Skipf("Pending test implementation: CreateLoadBalancer")
+func TestGetLoadBalancerNodes(t *testing.T) {
+	jsonList := "[{\"id\":\"1234\",\"public_ip\":\"1.2.3.4\"}]"
+	restMock := buildConcertoRESTMockClient(jsonList, 204, nil)
+	apiService := concertoAPIServiceREST{client: restMock}
+	nodes, err := apiService.GetLoadBalancerNodes("someLB")
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	expectedCall := "GET /kaas/load_balancers/someLB/nodes"
+	if len(restMock.receivedCalls) != 1 ||
+		restMock.receivedCalls[0] != expectedCall {
+		t.Errorf("Received this sequence of calls: '%v' but expected: '%v'", restMock.receivedCalls, expectedCall)
+	}
+	if len(nodes) != 1 {
+		t.Errorf("Received %v nodes but expected 1", len(nodes))
+	}
+	if nodes[0].ID != "1234" {
+		t.Errorf("Received node with id '%v' but expected '1234'", nodes[0].ID)
+	}
 }
 
-func buildConcertoRESTMockClient(body string, status int, err error) *RESTMock {
-	return &RESTMock{body: []byte(body), status: status, err: err}
+func TestGetLoadBalancerNodesAsIPs(t *testing.T) {
+	jsonList := "[{\"id\":\"1234\",\"public_ip\":\"1.2.3.4\"}]"
+	restMock := buildConcertoRESTMockClient(jsonList, 204, nil)
+	apiService := concertoAPIServiceREST{client: restMock}
+	nodes, err := apiService.GetLoadBalancerNodesAsIPs("someLB")
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	expectedCall := "GET /kaas/load_balancers/someLB/nodes"
+	if len(restMock.receivedCalls) != 1 ||
+		restMock.receivedCalls[0] != expectedCall {
+		t.Errorf("Received this sequence of calls: '%v' but expected: '%v'", restMock.receivedCalls, expectedCall)
+	}
+	if len(nodes) != 1 {
+		t.Errorf("Received %v nodes but expected 1", len(nodes))
+	}
+	if nodes[0] != "1.2.3.4" {
+		t.Errorf("Received ip '%v' but expected '1.2.3.4'", nodes[0])
+	}
 }
+
+func Test_CreateLoadBalancer_Success(t *testing.T) {
+	name := "myLB"
+	port := 4567
+	nodePort := 5678
+	jsonList := fmt.Sprintf("{\"id\":\"1234\",\"name\":\"%s\",\"fqdn\":\"%s\",\"port\":%v,\"nodeport\":%v,\"protocol\":\"tcp\"}", name, name, port, nodePort)
+	restMock := buildConcertoRESTMockClient(jsonList, 201, nil)
+	apiService := concertoAPIServiceREST{client: restMock}
+	lb, err := apiService.CreateLoadBalancer(name, port, nodePort)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	expectedCallBody := fmt.Sprintf("{\"id\":\"\",\"name\":\"%s\",\"fqdn\":\"%s\",\"port\":%v,\"nodeport\":%v,\"protocol\":\"tcp\"}", name, name, port, nodePort)
+	expectedCall := fmt.Sprintf("POST /kaas/load_balancers %s", expectedCallBody)
+	if len(restMock.receivedCalls) != 1 ||
+		restMock.receivedCalls[0] != expectedCall {
+		t.Errorf("Received this sequence of calls: '%v' but expected: '%v'", restMock.receivedCalls, expectedCall)
+	}
+	if lb.Id != "1234" {
+		t.Errorf("Unexpected load balancer id: '%v'", lb.Id)
+	}
+	if lb.Name != name {
+		t.Errorf("Unexpected load balancer name: '%v'", lb.Name)
+	}
+	if lb.FQDN != name {
+		t.Errorf("Unexpected load balancer FQDN: '%v'", lb.FQDN)
+	}
+	if lb.Port != port {
+		t.Errorf("Unexpected load balancer port: '%v'", lb.Port)
+	}
+	if lb.NodePort != nodePort {
+		t.Errorf("Unexpected load balancer node port: '%v'", lb.NodePort)
+	}
+	if lb.Protocol != "tcp" {
+		t.Errorf("Unexpected load balancer protocol: '%v'", lb.Protocol)
+	}
+}
+
+func Test_CreateLoadBalancer_UnexpectedHTTPStatus(t *testing.T) {
+	name := "myLB"
+	port := 4567
+	nodePort := 5678
+	jsonList := fmt.Sprintf("{\"id\":\"1234\",\"name\":\"%s\",\"fqdn\":\"%s\",\"port\":%v,\"nodeport\":%v,\"protocol\":\"tcp\"}", name, name, port, nodePort)
+	restMock := buildConcertoRESTMockClient(jsonList, 500, nil)
+	apiService := concertoAPIServiceREST{client: restMock}
+	_, err := apiService.CreateLoadBalancer(name, port, nodePort)
+	if err == nil {
+		t.Errorf("Expected error but got none")
+	}
+}
+
+func Test_CreateLoadBalancer_UnmarshalError(t *testing.T) {
+	name := "myLB"
+	port := 4567
+	nodePort := 5678
+	jsonList := "notvalidjson"
+	restMock := buildConcertoRESTMockClient(jsonList, 201, nil)
+	apiService := concertoAPIServiceREST{client: restMock}
+	_, err := apiService.CreateLoadBalancer(name, port, nodePort)
+	if err == nil {
+		t.Errorf("Expected error but got none")
+	}
+}
+
+func Test_CreateLoadBalancer_HTTPClientError(t *testing.T) {
+	name := "myLB"
+	port := 4567
+	nodePort := 5678
+	jsonList := fmt.Sprintf("{\"id\":\"1234\",\"name\":\"%s\",\"fqdn\":\"%s\",\"port\":%v,\"nodeport\":%v,\"protocol\":\"tcp\"}", name, name, port, nodePort)
+	somerror := errors.New("some error")
+	restMock := buildConcertoRESTMockClient(jsonList, 201, somerror)
+	apiService := concertoAPIServiceREST{client: restMock}
+	_, err := apiService.CreateLoadBalancer(name, port, nodePort)
+	if err == nil {
+		t.Errorf("Expected error but got none")
+	}
+}
+
+// Mock implementation of rest service
 
 type RESTMock struct {
 	receivedCalls []string
@@ -239,4 +368,8 @@ func (mock *RESTMock) Post(path string, body []byte) ([]byte, int, error) {
 func (mock *RESTMock) Delete(path string) ([]byte, int, error) {
 	mock.receivedCalls = append(mock.receivedCalls, "DELETE "+path)
 	return mock.body, mock.status, mock.err
+}
+
+func buildConcertoRESTMockClient(body string, status int, err error) *RESTMock {
+	return &RESTMock{body: []byte(body), status: status, err: err}
 }

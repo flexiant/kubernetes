@@ -46,6 +46,7 @@ type ConcertoCloud struct {
 type ConcertoConfig struct {
 	Connection struct {
 		APIEndpoint string `gcfg:"apiendpoint"`
+		CACert      string `gcfg:"cacert"`
 		Cert        string `gcfg:"cert"`
 		Key         string `gcfg:"key"`
 	}

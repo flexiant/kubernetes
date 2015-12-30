@@ -18,6 +18,7 @@ package concerto_cloud
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -38,17 +39,23 @@ func newRestService(config ConcertoConfig) (concertoRESTService, error) {
 }
 
 func httpClient(config ConcertoConfig) (*http.Client, error) {
-	// Loads Clients Certificates and creates and 509KeyPair
+	// load client certificate
 	cert, err := tls.LoadX509KeyPair(config.Connection.Cert, config.Connection.Key)
 	if err != nil {
 		return nil, fmt.Errorf("error loading X509 key pair: %v", err)
 	}
-
-	// Creates a client with specific transport configurations
+	// load CA file to verify server
+	CA_Pool := x509.NewCertPool()
+	severCert, err := ioutil.ReadFile(config.Connection.CACert)
+	if err != nil {
+		return nil, fmt.Errorf("could not load CA file: %v", err)
+	}
+	CA_Pool.AppendCertsFromPEM(severCert)
+	// create a client with specific transport configurations
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			InsecureSkipVerify: true,
+			RootCAs:      CA_Pool,
+			Certificates: []tls.Certificate{cert},
 		},
 	}
 	client := &http.Client{Transport: transport}
